@@ -33,7 +33,7 @@ class DiffScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(classes="screen-container"):
-            with Container(classes="diff-header"):
+            with Container(classes="toolbar"):
                 yield Label(f"Snapshots — {self.domain}")
                 yield Button(
                     "Compute Diff", id="diff-btn", variant="primary", disabled=True
@@ -124,14 +124,16 @@ class DiffScreen(Screen[None]):
             return
 
         for rec in sorted(diff_result.added, key=lambda r: (r.type.value, r.name)):
-            table.add_row(f"+ {rec.type.value}", rec.name, str(rec.ttl), rec.value)
+            rtype = f"[bold #a6e22e]+ {rec.type.value}[/]"
+            table.add_row(rtype, rec.name, str(rec.ttl), rec.value)
         for rec in sorted(diff_result.removed, key=lambda r: (r.type.value, r.name)):
-            table.add_row(
-                f"- {rec.type.value}", rec.name, str(rec.ttl), rec.value
-            )
+            rtype = f"[bold #f92672]- {rec.type.value}[/]"
+            table.add_row(rtype, rec.name, str(rec.ttl), rec.value)
         for change in diff_result.changed:
             key = change["record_key"]
             parts = key.split(":", 2)
             rtype = parts[0] if parts else ""
             name = parts[1] if len(parts) > 1 else ""
-            table.add_row(f"~ {rtype}", name, "", str(change["changes"]))
+            table.add_row(
+                f"[bold #e6db74]~ {rtype}[/]", name, "", str(change["changes"])
+            )

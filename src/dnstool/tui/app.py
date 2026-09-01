@@ -12,6 +12,7 @@ from dnstool.config import Config
 from dnstool.tui.screens.check import CheckScreen
 from dnstool.tui.screens.dashboard import Dashboard
 from dnstool.tui.screens.diff import DiffScreen
+from dnstool.tui.theme import DNSTOOL_THEME
 
 
 class DomainInputScreen(Screen[None]):
@@ -125,6 +126,8 @@ class DnstoolApp(App[None]):
     def __init__(self, config: Config | None = None) -> None:
         super().__init__()
         self.config = config
+        self.register_theme(DNSTOOL_THEME)
+        self.theme = DNSTOOL_THEME.name
 
     def compose(self) -> ComposeResult:
         yield Header()

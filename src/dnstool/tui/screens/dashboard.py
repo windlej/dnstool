@@ -33,7 +33,7 @@ class Dashboard(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(classes="screen-container"):
-            with Container(classes="dashboard-header"):
+            with Container(classes="toolbar"):
                 yield Label("Tracked Domains")
                 yield Button(
                     "Check Domain", id="check-domain-btn", variant="primary"
@@ -140,6 +140,7 @@ class Dashboard(Screen[None]):
         table = self.query_one("#dashboard-table", DataTable)
         table.clear()
         empty_label = self.query_one("#dashboard-empty", Static)
+        table.display = bool(rows)
         empty_label.display = not rows
         for domain, status, ts, count in rows:
             table.add_row(domain, status, ts, str(count))

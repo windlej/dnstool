@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from textual import work
+from textual import events, work
 from textual.containers import Container
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
@@ -22,6 +22,20 @@ def truncate(text: str, max_width: int) -> str:
     if max_width <= 1:
         return "…"
     return text[: max_width - 1].rstrip() + "…"
+
+
+# Monokai-tinted severity colors (match dnstool/tui/theme.py)
+_SEVERITY_COLORS = {
+    "critical": "#f92672",
+    "warning": "#e6db74",
+    "pass": "#a6e22e",
+    "info": "#66d9ef",
+}
+
+
+def _severity_cell(severity: str) -> str:
+    color = _SEVERITY_COLORS.get(severity, "#f8f8f2")
+    return f"[bold {color}]{severity.upper()}[/]"
 
 
 class CheckScreen(Screen[None]):
@@ -46,11 +60,22 @@ class CheckScreen(Screen[None]):
                 yield Static(
                     f"Compliance checks for {self.domain}", id="check-title"
                 )
-            yield DataTable(id="checks-table")
-            yield Static("", id="check-detail-bar", classes="check-detail-bar")
-            yield Static(f"Unique Records — {self.domain}", id="records-title")
-            yield DataTable(id="records-table")
+            with Container(classes="check-body"):
+                with Container(id="checks-pane", classes="check-pane"):
+                    yield DataTable(id="checks-table")
+                    yield Static(
+                        "", id="check-detail-bar", classes="check-detail-bar"
+                    )
+                with Container(id="records-pane", classes="check-pane"):
+                    yield Static(
+                        f"Unique Records — {self.domain}", id="records-title"
+                    )
+                    yield DataTable(id="records-table")
         yield Footer()
+
+    def on_resize(self, event: events.Resize) -> None:
+        body = self.query_one(".check-body", Container)
+        body.set_class(event.size.width >= 130, "-split")
 
     def on_mount(self) -> None:
         checks_table = self.query_one("#checks-table", DataTable)
@@ -125,7 +150,7 @@ class CheckScreen(Screen[None]):
         checks_table = self.query_one("#checks-table", DataTable)
         checks_table.clear()
         for check in self._checks:
-            sev = check.severity.value.upper()
+            sev = _severity_cell(check.severity.value)
             msg = truncate(check.message or "", 80)
             details = truncate(check.details or "", 60)
             checks_table.add_row(sev, check.name, msg, details)

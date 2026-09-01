@@ -1,8 +1,17 @@
+/* dnstool TUI — Monokai theme.
+   All semantic colors resolve from the registered "dnstool-monokai" theme
+   (see dnstool/tui/theme.py), so every widget inherits a baked-in palette
+   with no fallback to the terminal's ANSI colors. */
+
 DnstoolApp {
-  background: $surface;
+  background: $background;
 }
 
-/* --- Common --- */
+Screen {
+  background: $background;
+}
+
+/* --- Common layout --- */
 
 .screen-container {
   width: 100%;
@@ -16,21 +25,222 @@ DnstoolApp {
   margin-top: 1;
 }
 
-/* Visible focus so tab/shift+tab navigation is obvious */
+/* Shared toolbar (dashboard + diff header rows) */
+.toolbar {
+  width: 100%;
+  height: auto;
+  layout: horizontal;
+  background: $panel;
+  border: round $border-blurred;
+  padding: 0 1;
+}
+
+.toolbar Label {
+  width: 1fr;
+  height: 100%;
+  content-align: left middle;
+  padding: 0 1;
+  color: $text;
+  text-style: bold;
+}
+
+.toolbar Button {
+  width: auto;
+  margin: 0 0 0 1;
+}
+
+/* --- Chrome: Header / Footer --- */
+
+Header {
+  background: $surface;
+  color: $text;
+  border-bottom: solid $border-blurred;
+}
+
+HeaderTitle {
+  text-style: bold;
+  color: $text;
+}
+
+HeaderIcon {
+  background: transparent;
+  color: $accent;
+}
+
+HeaderClock {
+  background: transparent;
+  color: $text-muted;
+  text-opacity: 100%;
+}
+
+Footer {
+  background: $surface;
+  border-top: solid $border-blurred;
+}
+
+Footer > FooterKey .footer-key--key {
+  color: $accent;
+}
+
+Footer > FooterKey .footer-key--description {
+  color: $text-muted;
+}
+
+/* --- Panels --- */
+
+.panel {
+  background: $panel;
+  border: round $border-blurred;
+}
+
+/* --- DataTable --- */
+
+DataTable {
+  background: $surface;
+  color: $text;
+  border: round $border-blurred;
+}
+
 DataTable:focus {
   border: round $accent;
 }
 
-DataTable {
-  border: round $primary;
+DataTable > .datatable--header {
+  background: $panel;
+  color: $text;
+  text-style: bold;
+}
+
+DataTable > .datatable--odd-row {
+  background: transparent;
+}
+
+/* Keep the zebra visible and Monokai-flavored (id beats the default :dark rule). */
+#dashboard-table > .datatable--even-row,
+#checks-table > .datatable--even-row,
+#records-table > .datatable--even-row,
+#diff-table > .datatable--even-row {
+  background: $panel 42%;
+}
+
+/* --- OptionList --- */
+
+OptionList {
+  background: $surface;
+  color: $text;
+  border: round $border-blurred;
+}
+
+OptionList:focus {
+  border: round $accent;
+}
+
+OptionList > .option-list--option {
+  color: $text;
+}
+
+OptionList > .option-list--option-highlighted {
+  background: $accent 25%;
+  color: $text;
+}
+
+OptionList > .option-list--option-hover {
+  background: $panel 60%;
+}
+
+/* --- Input --- */
+
+Input {
+  background: $surface;
+  color: $text;
+  border: round $border-blurred;
 }
 
 Input:focus {
   border: round $accent;
 }
 
-Button:focus {
+Input > .input--placeholder {
+  color: $text-muted;
+}
+
+/* --- Button --- */
+
+Button.-style-flat,
+Button.-style-default {
+  background: $surface;
+  color: $text;
+  border: round $border-blurred;
   text-style: bold;
+}
+
+Button.-style-flat:hover,
+Button.-style-default:hover {
+  background: $panel;
+  border: round $accent-darken-1;
+  color: $text;
+}
+
+Button.-style-flat:focus,
+Button.-style-default:focus {
+  border: round $accent;
+  text-style: $button-focus-text-style;
+  background: $panel;
+}
+
+Button.-style-flat.-active,
+Button.-style-default.-active {
+  border: round $accent;
+  tint: $background 30%;
+}
+
+Button.-style-flat:disabled,
+Button.-style-default:disabled {
+  color: $text-muted;
+  border: round $border-blurred;
+  text-style: italic;
+  pointer: not-allowed;
+}
+
+Button.-style-flat.-primary,
+Button.-style-default.-primary {
+  background: $primary;
+  border: round $primary;
+  color: $button-color-foreground;
+}
+
+Button.-style-flat.-primary:hover,
+Button.-style-default.-primary:hover {
+  background: $primary-darken-2;
+  border: round $primary-lighten-1;
+}
+
+Button.-style-flat.-error,
+Button.-style-default.-error {
+  background: $error 15%;
+  border: round $error;
+  color: $error;
+}
+
+Button.-style-flat.-error:hover,
+Button.-style-default.-error:hover {
+  background: $error 30%;
+  border: round $error-lighten-1;
+  color: $error-lighten-1;
+}
+
+Button.-style-flat.-success,
+Button.-style-default.-success {
+  background: $success 15%;
+  border: round $success;
+  color: $success;
+}
+
+Button.-style-flat.-warning,
+Button.-style-default.-warning {
+  background: $warning 15%;
+  border: round $warning;
+  color: $warning;
 }
 
 /* --- Dashboard --- */
@@ -39,24 +249,9 @@ Button:focus {
   height: 1fr;
 }
 
-.dashboard-header {
-  width: 100%;
-  height: auto;
-  layout: horizontal;
-  background: $panel;
-  padding: 0 1;
-}
-
-.dashboard-header Label {
-  width: 1fr;
-  height: 100%;
-  content-align: left middle;
-  padding: 0 1;
-  color: $text;
-}
-
-.dashboard-header Button {
-  width: auto;
+#dashboard-empty {
+  height: 1fr;
+  content-align: center middle;
 }
 
 /* --- Check Screen --- */
@@ -66,6 +261,7 @@ Button:focus {
   height: auto;
   padding: 1;
   background: $panel;
+  border: round $border-blurred;
   layout: horizontal;
 }
 
@@ -79,68 +275,97 @@ Button:focus {
   padding: 0 1;
   text-style: bold;
   color: $text;
+  background: $surface;
+  border: round $border-blurred;
 }
 
 .check-score.score-good {
-  background: $success 30%;
+  background: $success 22%;
+  color: $success-lighten-1;
+  border: round $success-darken-1;
 }
 
 .check-score.score-warn {
-  background: $warning 30%;
+  background: $warning 22%;
+  color: $warning-lighten-1;
+  border: round $warning-darken-1;
 }
 
 .check-score.score-bad {
-  background: $error 30%;
+  background: $error 22%;
+  color: $error-lighten-1;
+  border: round $error-darken-1;
 }
 
-.check-details {
+#check-title {
   width: 1fr;
-  height: auto;
+  height: 100%;
+  content-align: left middle;
   padding: 0 1;
+  color: $text;
+  text-style: bold;
+}
+
+.check-body {
+  width: 100%;
+  height: 1fr;
+  margin-top: 1;
+  layout: vertical;
+}
+
+.check-pane {
+  width: 100%;
+  height: 1fr;
+  layout: vertical;
+}
+
+#records-pane {
+  margin-top: 1;
+}
+
+/* Wide terminals: side-by-side panes */
+.check-body.-split {
+  layout: horizontal;
+}
+
+.check-body.-split .check-pane {
+  width: 1fr;
+  height: 100%;
+}
+
+.check-body.-split #records-pane {
+  margin-top: 0;
+  margin-left: 1;
+}
+
+.check-pane > DataTable {
+  height: 1fr;
+  margin-top: 0;
+}
+
+#checks-table {
+  min-height: 4;
 }
 
 .check-detail-bar {
   width: 100%;
   height: auto;
   padding: 1;
-  margin: 1 0 0 0;
-  background: $panel;
+  margin-top: 1;
+  background: $surface;
   color: $text-muted;
-  border: round $accent;
+  border: round $accent-darken-2;
+  min-height: 3;
 }
 
-#checks-table {
+#records-title {
+  color: $accent;
+  text-style: bold;
   height: auto;
-  max-height: 50%;
-  margin-top: 1;
-}
-
-#records-table {
-  height: 1fr;
-  margin-top: 1;
+  margin-bottom: 1;
 }
 
 /* --- Diff Screen --- */
-
-.diff-header {
-  width: 100%;
-  height: auto;
-  layout: horizontal;
-  background: $panel;
-  padding: 0 1;
-}
-
-.diff-header Label {
-  width: 1fr;
-  height: 100%;
-  content-align: left middle;
-  padding: 0 1;
-  color: $text;
-}
-
-.diff-header Button {
-  width: auto;
-}
 
 #snapshots-list {
   width: 100%;
@@ -148,33 +373,13 @@ Button:focus {
   margin-top: 1;
 }
 
-.diff-result {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  padding: 1;
+#diff-empty {
+  height: 1fr;
+  content-align: center middle;
 }
 
-.diff-record {
-  width: 100%;
-  height: auto;
-  padding: 0 1;
-}
-
-.diff-record.added {
-  color: $success;
-}
-
-.diff-record.removed {
-  color: $error;
-}
-
-.diff-record.changed {
-  color: $warning;
-}
-
-.diff-record.label {
-  text-style: bold;
+#diff-table {
+  height: 1fr;
   margin-top: 1;
 }
 
@@ -196,6 +401,7 @@ Button:focus {
   height: auto;
   margin-bottom: 1;
   color: $text;
+  text-style: bold;
 }
 
 .domain-input-container Input {
@@ -221,15 +427,18 @@ Button:focus {
   height: auto;
   padding: 1 2;
   background: $panel;
+  border: round $border-blurred;
   margin-bottom: 1;
   color: $text;
+  text-style: bold;
 }
 
 .backup-result {
   width: 100%;
   height: auto;
   padding: 1 2;
-  background: $panel;
+  background: $surface;
+  border: round $border-blurred;
 }
 
 .backup-result Label {
@@ -246,6 +455,7 @@ Button:focus {
   height: auto;
   padding: 1;
   background: $panel;
+  border: round $border-blurred;
   margin-bottom: 1;
 }
 
@@ -275,7 +485,13 @@ Button:focus {
 
 #tracked-list {
   width: 100%;
-  height: 1fr;
+  height: auto;
+  margin-top: 1;
+  max-height: 20;
+}
+
+#untrack-btn {
+  width: 100%;
   margin-top: 1;
 }
 
@@ -288,9 +504,22 @@ Button:focus {
   text-align: center;
   color: $text-muted;
   text-style: italic;
+  background: $surface;
+  border: round $border-blurred;
 }
 
-.status-ok { color: $success; }
-.status-warn { color: $warning; }
-.status-err { color: $error; }
-.status-info { color: $accent; }
+.status-ok {
+  color: $success;
+}
+
+.status-warn {
+  color: $warning;
+}
+
+.status-err {
+  color: $error;
+}
+
+.status-info {
+  color: $accent;
+}
