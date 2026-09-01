@@ -19,6 +19,7 @@ from dnstool.config import (
     save_default_config,
 )
 from dnstool.dns_engine import DNSClient, DNSEngineError, coerce_record_types
+from dnstool.history import ChangeStatus, log_run
 from dnstool.models import (
     ComplianceReport,
     DNSRecord,
@@ -171,7 +172,11 @@ def backup(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
     config: Path | None = typer.Option(None, "-c", "--config", help="Config file path"),
 ) -> None:
-    """Take a backup of all DNS records for a domain."""
+    """Take a backup of all DNS records for a domain.
+
+    Exit codes: 0 = success with no change (or first backup), 1 = success with
+    changes, 2 = error.
+    """
     ensure_dirs()
     cfg = load_config(config)
     store = SnapshotStore(cfg)
@@ -184,7 +189,9 @@ def backup(
         snapshot = store.capture(domain, client)
     except (DNSEngineError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        raise typer.Exit(2) from exc
+
+    history = log_run(store, snapshot.domain)
 
     path = store.saved_path(snapshot)
     if output:
@@ -192,18 +199,20 @@ def backup(
 
     if output_json:
         typer.echo(json.dumps(snapshot.to_dict(), indent=2))
-        return
+    else:
+        counts = {t.value: len(recs) for t, recs in snapshot.records.items() if recs}
+        summary = ", ".join(f"{k}={v}" for k, v in counts.items()) if counts else "none"
+        typer.echo(f"Saved snapshot for {snapshot.domain} to {path}")
+        typer.echo(f"  Captured at {snapshot.captured_at.isoformat()}")
+        typer.echo(f"  Records found: {summary}")
+        typer.echo(
+            f"  Keeping up to {store.max_snapshots_for(domain)} snapshots for this domain."
+        )
+        if output:
+            typer.echo(f"  Wrote a copy to {output}")
 
-    counts = {t.value: len(recs) for t, recs in snapshot.records.items() if recs}
-    summary = ", ".join(f"{k}={v}" for k, v in counts.items()) if counts else "none"
-    typer.echo(f"Saved snapshot for {snapshot.domain} to {path}")
-    typer.echo(f"  Captured at {snapshot.captured_at.isoformat()}")
-    typer.echo(f"  Records found: {summary}")
-    typer.echo(
-        f"  Keeping up to {store.max_snapshots_for(domain)} snapshots for this domain."
-    )
-    if output:
-        typer.echo(f"  Wrote a copy to {output}")
+    if history.status == ChangeStatus.CHANGED:
+        raise typer.Exit(1)
 
 
 @app.command()

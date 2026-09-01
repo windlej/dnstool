@@ -9,15 +9,18 @@ import pytest
 from typer.testing import CliRunner
 
 import dnstool.config as config_module
+import dnstool.history as history_module
 import dnstool.snapshots as snapshots_module
 import dnstool.tracking as tracking_module
 from dnstool.__main__ import app
 from dnstool.config import Config
-from dnstool.dns_engine import DNSClient
+from dnstool.dns_engine import DNSClient, DNSEngineError
+from dnstool.history import ChangeStatus, last_entry
 from dnstool.models import (
     DNSRecord,
     DNSServerStatus,
     DomainResult,
+    DomainSnapshot,
     RecordType,
     ServerResponse,
 )
@@ -75,6 +78,7 @@ def isolated_dirs(
     monkeypatch.setattr(config_module, "HISTORY_DIR", dirs["history"])
     monkeypatch.setattr(snapshots_module, "BACKUPS_DIR", dirs["backups"])
     monkeypatch.setattr(tracking_module, "TRACKED_DIR", dirs["tracked"])
+    monkeypatch.setattr(history_module, "HISTORY_DIR", dirs["history"])
     return dirs
 
 
@@ -140,6 +144,128 @@ class TestBackupCommand:
 
         assert result.exit_code == 0
         assert '"domain": "example.com"' in result.stdout
+
+    def _seed(
+        self,
+        isolated_dirs: dict[str, Path],
+        *records: DNSRecord,
+    ) -> None:
+        store = SnapshotStore(Config(), base_dir=isolated_dirs["backups"])
+        store.save(
+            DomainSnapshot(
+                domain="example.com",
+                captured_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+                records={A: list(records)},
+            )
+        )
+
+    def test_backup_initial_logs_initial_and_exits_zero(
+        self, isolated_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            DNSClient,
+            "query_domain",
+            _fake_query({"example.com": [_rec(A, "example.com.", "1.2.3.4")]}),
+        )
+
+        result = runner.invoke(app, ["backup", "example.com"])
+
+        assert result.exit_code == 0
+        entry = last_entry("example.com", base_dir=isolated_dirs["history"])
+        assert entry is not None
+        assert entry.status is ChangeStatus.INITIAL
+
+    def test_backup_no_change_exits_zero(
+        self, isolated_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._seed(isolated_dirs, _rec(A, "example.com.", "1.2.3.4"))
+        monkeypatch.setattr(
+            DNSClient,
+            "query_domain",
+            _fake_query({"example.com": [_rec(A, "example.com.", "1.2.3.4")]}),
+        )
+
+        result = runner.invoke(app, ["backup", "example.com"])
+
+        assert result.exit_code == 0
+        entry = last_entry("example.com", base_dir=isolated_dirs["history"])
+        assert entry is not None
+        assert entry.status is ChangeStatus.NO_CHANGE
+
+    def test_backup_changed_exits_one(
+        self, isolated_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._seed(isolated_dirs, _rec(A, "example.com.", "1.2.3.4"))
+        monkeypatch.setattr(
+            DNSClient,
+            "query_domain",
+            _fake_query(
+                {
+                    "example.com": [
+                        _rec(A, "example.com.", "1.2.3.4"),
+                        _rec(A, "example.com.", "1.2.3.5"),
+                    ]
+                }
+            ),
+        )
+
+        result = runner.invoke(app, ["backup", "example.com"])
+
+        assert result.exit_code == 1
+        entry = last_entry("example.com", base_dir=isolated_dirs["history"])
+        assert entry is not None
+        assert entry.status is ChangeStatus.CHANGED
+        assert entry.added == 1
+
+    def test_backup_changed_json_still_exits_one(
+        self, isolated_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._seed(isolated_dirs, _rec(A, "example.com.", "1.2.3.4"))
+        monkeypatch.setattr(
+            DNSClient,
+            "query_domain",
+            _fake_query(
+                {
+                    "example.com": [
+                        _rec(A, "example.com.", "1.2.3.4"),
+                        _rec(A, "example.com.", "1.2.3.5"),
+                    ]
+                }
+            ),
+        )
+
+        result = runner.invoke(app, ["backup", "example.com", "--json"])
+
+        assert result.exit_code == 1
+        assert '"domain": "example.com"' in result.stdout
+
+    def test_backup_error_exits_two(
+        self, isolated_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def boom(self: DNSClient, domain: str, record_types: object | None = None) -> DomainResult:
+            raise DNSEngineError("query failed")
+
+        monkeypatch.setattr(DNSClient, "query_domain", boom)
+
+        result = runner.invoke(app, ["backup", "example.com"])
+
+        assert result.exit_code == 2
+        assert "query failed" in result.stderr
+        assert last_entry("example.com", base_dir=isolated_dirs["history"]) is None
+
+
+class TestCommandSurface:
+    def test_schedule_command_is_removed(self) -> None:
+        result = runner.invoke(app, ["schedule", "example.com", "*/6 * * * *"])
+        assert result.exit_code != 0
+        assert "No such command" in result.output
+
+    def test_backup_help_documents_exit_codes(
+        self, isolated_dirs: dict[str, Path]
+    ) -> None:
+        result = runner.invoke(app, ["backup", "--help"])
+        assert result.exit_code == 0
+        assert "backup" in result.stdout
 
 
 class TestDiffCommand:
