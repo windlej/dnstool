@@ -10,3 +10,11 @@ All-in-one DNS analysis tool with TUI interface.
 - DNS record backup and diff
 - Domain tracking with change history
 - Beautiful TUI dashboard
+
+## Scheduling backups
+
+`dnstool` is a stateless one-shot CLI. To run periodic DNS backups with
+change detection and script-friendly exit codes, wire it into your OS scheduler.
+
+See [docs/scheduling.md](docs/scheduling.md) for Linux cron, macOS launchd, and
+Windows Task Scheduler setup recipes.
