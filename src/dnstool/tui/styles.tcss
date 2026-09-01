@@ -1,0 +1,268 @@
+DnstoolApp {
+  background: $surface;
+}
+
+/* --- Common --- */
+
+.screen-container {
+  width: 100%;
+  height: 100%;
+  padding: 1 2;
+  overflow: hidden;
+}
+
+.screen-container > DataTable {
+  height: 1fr;
+  margin-top: 1;
+}
+
+/* --- Dashboard --- */
+
+#dashboard-table {
+  height: 1fr;
+}
+
+.dashboard-header {
+  width: 100%;
+  height: auto;
+  layout: horizontal;
+  background: $panel;
+  padding: 0 1;
+}
+
+.dashboard-header Label {
+  width: 1fr;
+  height: 100%;
+  content-align: left middle;
+  padding: 0 1;
+  color: $text;
+}
+
+.dashboard-header Button {
+  width: auto;
+}
+
+/* --- Check Screen --- */
+
+.check-summary {
+  width: 100%;
+  height: auto;
+  padding: 1;
+  background: $panel;
+  layout: horizontal;
+}
+
+.check-score {
+  width: auto;
+  height: auto;
+  min-width: 12;
+  max-width: 20;
+  text-align: center;
+  content-align: center middle;
+  padding: 0 1;
+  text-style: bold;
+  color: $text;
+}
+
+.check-score.score-good {
+  background: $success 30%;
+}
+
+.check-score.score-warn {
+  background: $warning 30%;
+}
+
+.check-score.score-bad {
+  background: $error 30%;
+}
+
+.check-details {
+  width: 1fr;
+  height: auto;
+  padding: 0 1;
+}
+
+#checks-table {
+  height: 1fr;
+  margin-top: 1;
+}
+
+#records-table {
+  height: 1fr;
+  margin-top: 1;
+}
+
+/* --- Diff Screen --- */
+
+.diff-header {
+  width: 100%;
+  height: auto;
+  layout: horizontal;
+  background: $panel;
+  padding: 0 1;
+}
+
+.diff-header Label {
+  width: 1fr;
+  height: 100%;
+  content-align: left middle;
+  padding: 0 1;
+  color: $text;
+}
+
+.diff-header Button {
+  width: auto;
+}
+
+#snapshots-list {
+  width: 100%;
+  height: 1fr;
+  margin-top: 1;
+}
+
+.diff-result {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 1;
+}
+
+.diff-record {
+  width: 100%;
+  height: auto;
+  padding: 0 1;
+}
+
+.diff-record.added {
+  color: $success;
+}
+
+.diff-record.removed {
+  color: $error;
+}
+
+.diff-record.changed {
+  color: $warning;
+}
+
+.diff-record.label {
+  text-style: bold;
+  margin-top: 1;
+}
+
+/* --- Domain Input Modal --- */
+
+.domain-input-container {
+  width: 60;
+  height: auto;
+  max-width: 90%;
+  padding: 2;
+  background: $panel;
+  border: tall $accent;
+  margin: 1 2;
+  layout: vertical;
+}
+
+.domain-input-container Label {
+  width: 100%;
+  height: auto;
+  margin-bottom: 1;
+  color: $text;
+}
+
+.domain-input-container Input {
+  width: 100%;
+  margin-bottom: 1;
+}
+
+.domain-input-buttons {
+  width: 100%;
+  height: auto;
+  layout: horizontal;
+}
+
+.domain-input-buttons Button {
+  width: 1fr;
+  margin: 0 1;
+}
+
+/* --- Backup Screen --- */
+
+.backup-status {
+  width: 100%;
+  height: auto;
+  padding: 1 2;
+  background: $panel;
+  margin-bottom: 1;
+  color: $text;
+}
+
+.backup-result {
+  width: 100%;
+  height: auto;
+  padding: 1 2;
+  background: $panel;
+}
+
+.backup-result Label {
+  width: 100%;
+  height: auto;
+  padding: 0 1;
+  color: $text;
+}
+
+/* --- Track Screen --- */
+
+.track-section {
+  width: 100%;
+  height: auto;
+  padding: 1;
+  background: $panel;
+  margin-bottom: 1;
+}
+
+.track-section Label {
+  width: 100%;
+  height: auto;
+  margin-bottom: 1;
+  color: $text;
+  text-style: bold;
+}
+
+.track-input-row {
+  width: 100%;
+  height: auto;
+  layout: horizontal;
+  margin-top: 1;
+}
+
+.track-input-row Input {
+  width: 1fr;
+  margin-right: 1;
+}
+
+.track-input-row Button {
+  width: auto;
+}
+
+#tracked-list {
+  width: 100%;
+  height: 1fr;
+  margin-top: 1;
+}
+
+/* --- Utility --- */
+
+.empty-state {
+  width: 100%;
+  height: auto;
+  padding: 2 1;
+  text-align: center;
+  color: $text-muted;
+  text-style: italic;
+}
+
+.status-ok { color: $success; }
+.status-warn { color: $warning; }
+.status-err { color: $error; }
+.status-info { color: $accent; }

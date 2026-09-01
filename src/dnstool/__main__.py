@@ -48,11 +48,13 @@ def tui(
     ),
 ) -> None:
     """Launch the TUI interface."""
+    from dnstool.tui.app import DnstoolApp
+
     ensure_dirs()
-    load_config(config)
+    cfg = load_config(config)
     typer.echo(f"Launching dnstool TUI (v{__version__})...")
-    # Phase 5-6: Will launch Textual app here
-    typer.echo("TUI not yet implemented. Use 'dnstool check' for now.")
+    app = DnstoolApp(config=cfg)
+    app.run()
 
 
 def _print_records_summary(result: DomainResult) -> None:
