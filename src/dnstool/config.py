@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 if sys.version_info >= (3, 11):
-    import tomllib
+    import tomllib  # type: ignore[import-not-found]
 else:
     try:
-        import tomllib
+        import tomllib  # type: ignore[import-not-found]
     except ModuleNotFoundError:
-        import tomli as tomllib  # type: ignore[no-redef]
+        import tomli as tomllib  # type: ignore[import-not-found, no-redef]
 
 from dnstool.models import RecordType
 
