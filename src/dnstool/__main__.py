@@ -301,20 +301,6 @@ def track(
 
 
 @app.command()
-def schedule(
-    domain: str = typer.Argument(help="Domain to schedule checks for"),
-    cron: str = typer.Argument(help="Cron expression (e.g. '*/6 * * * *')"),
-    config: Path | None = typer.Option(None, "-c", "--config", help="Config file path"),
-) -> None:
-    """Schedule periodic checks for a domain."""
-    ensure_dirs()
-    load_config(config)
-    typer.echo(f"Scheduling checks for {domain} with cron: {cron}")
-    # Phase 7: Will set up scheduler here
-    typer.echo("Scheduling not yet implemented (Phase 7).")
-
-
-@app.command()
 def init_config(
     force: bool = typer.Option(False, "--force", help="Overwrite existing config"),
 ) -> None:
