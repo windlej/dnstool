@@ -2,6 +2,9 @@
 
 All-in-one DNS analysis tool with TUI interface.
 
+See [docs/usage.md](docs/usage.md) for full usage: the TUI dashboard, CLI
+commands, configuration, and where data is stored.
+
 ## Features (planned)
 
 - Query domains across multiple name servers with response time tracking
