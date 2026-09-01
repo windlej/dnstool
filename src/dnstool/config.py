@@ -197,6 +197,43 @@ def _parse_domain_config(raw: dict[str, Any]) -> DomainConfig:
     return cfg
 
 
+#: Keys that mark a TOML table as a per-domain config rather than another label
+#: in the domain name (TOML splits dotted keys like ``[domains.example.com]``
+#: into nested tables).
+_DOMAIN_CONFIG_KEYS = {
+    "nameservers",
+    "record_types",
+    "checks",
+    "backup",
+    "schedule",
+    "tags",
+}
+
+
+def _flatten_domain_configs(
+    node: dict[str, Any],
+    prefix: str = "",
+    out: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Flatten TOML's nested domain tables back into dotted-key names.
+
+    ``[domains.example.com]`` parses as ``domains.example.com`` (nested), which
+    must be reassembled into the single key ``example.com``. Labels that are not
+    themselves domain settings (e.g. the ``com`` in ``domains.example.com``) are
+    folded into the domain name; tables carrying domain config keys terminate it.
+    """
+    if out is None:
+        out = {}
+    for key, value in node.items():
+        name = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            if set(value) & _DOMAIN_CONFIG_KEYS:
+                out[name] = value
+            else:
+                _flatten_domain_configs(value, name, out)
+    return out
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from TOML file.
 
@@ -233,7 +270,7 @@ def load_config(config_path: Path | None = None) -> Config:
 
     # Per-domain settings
     if "domains" in data:
-        for domain, domain_data in data["domains"].items():
+        for domain, domain_data in _flatten_domain_configs(data["domains"]).items():
             cfg.domains[domain] = _parse_domain_config(domain_data)
 
     return cfg
@@ -283,12 +320,12 @@ checks = [
 max_snapshots = 50
 
 # Per-domain overrides (optional)
-# [domains.example.com]
+# [domains."example.com"]
 # record_types = ["A", "AAAA", "MX", "TXT"]
 # checks = ["dmarc", "dkim", "spf"]
 # tags = ["production", "email"]
 #
-# [domains.example.com.schedule]
+# [domains."example.com".schedule]
 # enabled = true
 # cron = "*/6 * * * *"
 # notify_on_change = true

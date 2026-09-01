@@ -319,3 +319,14 @@ class DomainDiff:
     @property
     def has_changes(self) -> bool:
         return bool(self.added or self.removed or self.changed)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "domain": self.domain,
+            "old_snapshot": self.old_snapshot.to_dict(),
+            "new_snapshot": self.new_snapshot.to_dict(),
+            "added": [r.to_dict() for r in self.added],
+            "removed": [r.to_dict() for r in self.removed],
+            "changed": self.changed,
+            "has_changes": self.has_changes,
+        }
