@@ -11,6 +11,7 @@ from __future__ import annotations
 import ipaddress
 import re
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from dnstool.config import DEFAULT_CHECKS
@@ -318,7 +319,12 @@ def check_dnssec(result: DomainResult) -> CheckResult:
 
 @register("mx_best_practices")
 def check_mx_best_practices(result: DomainResult) -> CheckResult:
-    """MX: presence, canonical hostnames, and distinct priorities."""
+    """MX: presence, canonical hostnames, and non-redundant targets.
+
+    Equal preferences across distinct hosts are the standard load-balancing
+    pattern (RFC 5321) and keep failover working; only exact (priority, host)
+    duplicates are redundant.
+    """
     mxs = sorted(_records(result, RecordType.MX), key=lambda r: r.priority or 0)
 
     if not mxs:
@@ -329,31 +335,39 @@ def check_mx_best_practices(result: DomainResult) -> CheckResult:
             record_type=RecordType.MX,
         )
 
-    issues: list[str] = []
+    issues: dict[str, str] = {}
     for record in mxs:
         host = _mx_host(record)
         if _is_ip_address(host):
-            issues.append(f"MX target {host!r} is an IP literal; a hostname is required")
+            issues[record.value] = (
+                f"MX target {host!r} is an IP literal; a hostname is required"
+            )
         elif not host.endswith("."):
-            issues.append(f"MX target {host!r} is not canonical (missing trailing dot)")
+            issues[record.value] = (
+                f"MX target {host!r} is not canonical (missing trailing dot)"
+            )
 
-    priorities = [r.priority for r in mxs]
-    if len(priorities) != len(set(priorities)):
-        issues.append("multiple MX records share the same priority (defeats failover)")
+    seen: set[tuple[int, str]] = set()
+    for record in mxs:
+        key = (record.priority or 0, _mx_host(record).lower())
+        if key in seen:
+            issues[record.value] = f"duplicate MX record: {record.value}"
+        seen.add(key)
 
     if issues:
         return _result(
             "mx_best_practices",
             CheckSeverity.WARNING,
-            f"{len(mxs)} MX record(s) with issues.",
-            details="; ".join(issues),
+            f"{len(issues)} MX record(s) with issues.",
+            details="; ".join(issues.values()),
             record_type=RecordType.MX,
         )
 
     return _result(
         "mx_best_practices",
         CheckSeverity.PASS,
-        f"{len(mxs)} canonical MX record(s) with distinct priorities.",
+        f"{len(mxs)} canonical MX record(s); distinct targets provide "
+        "load balancing and failover.",
         record_type=RecordType.MX,
     )
 
@@ -455,13 +469,17 @@ def check_ns_best_practices(result: DomainResult) -> CheckResult:
 
 @register("caa_best_practices")
 def check_caa_best_practices(result: DomainResult) -> CheckResult:
-    """CAA: presence and tags restricting certificate issuance."""
+    """CAA: presence and tags restricting certificate issuance.
+
+    CAA is optional hardening; a missing record is informational and should
+    not penalize a domain's compliance score.
+    """
     caas = _records(result, RecordType.CAA)
 
     if not caas:
         return _result(
             "caa_best_practices",
-            CheckSeverity.WARNING,
+            CheckSeverity.INFO,
             "No CAA records found; any certificate authority may issue for this domain.",
             record_type=RecordType.CAA,
         )
@@ -530,12 +548,42 @@ def check_txt_best_practices(result: DomainResult) -> CheckResult:
 
 def _compliance_probe_queries(domain: str) -> list[tuple[str, list[RecordType]]]:
     """Extra queries needed to answer checks not covered by a plain domain query."""
+    # CNAMEs are requested alongside TXT so alias chains (e.g. EasyDMARC /
+    # SendGrid / Microsoft _dmarc and _domainkey delegations) can be resolved.
     probes: list[tuple[str, list[RecordType]]] = [
-        (f"_dmarc.{domain}", [RecordType.TXT]),
+        (f"_dmarc.{domain}", [RecordType.TXT, RecordType.CNAME]),
     ]
     for selector in DEFAULT_DKIM_SELECTORS:
-        probes.append((f"{selector}._domainkey.{domain}", [RecordType.TXT]))
+        probes.append(
+            (f"{selector}._domainkey.{domain}", [RecordType.TXT, RecordType.CNAME])
+        )
     return probes
+
+
+def _resolve_alias_names(cname_records: list[DNSRecord], owner: str) -> set[str]:
+    """Names reachable from ``owner`` via the CNAME chains in ``cname_records``.
+
+    Includes ``owner`` itself. Handles chains of any depth. A TXT record whose
+    owner is returned as a CNAME target is still an answer for ``owner``, so
+    walk every hop to collect the acceptable owner names.
+    """
+    aliases = {_fqdn(owner)}
+    frontier = {_fqdn(owner)}
+    while frontier:
+        next_frontier: set[str] = set()
+        for rec in cname_records:
+            if rec.type is not RecordType.CNAME:
+                continue
+            if _fqdn(rec.name) not in frontier:
+                continue
+            target = _fqdn(rec.value)
+            if target not in aliases:
+                aliases.add(target)
+                next_frontier.add(target)
+        if not next_frontier:
+            break
+        frontier = next_frontier
+    return aliases
 
 
 def with_compliance_probes(
@@ -546,6 +594,12 @@ def with_compliance_probes(
     Adds ``_dmarc``/``_domainkey`` TXT lookups plus root TXT and DNSSEC records
     (DNSKEY/DS) when they were not part of the original query. Probe failures are
     non-fatal.
+
+    Answers returned through a CNAME (common for hosted DMARC/DKIM delegation)
+    are kept and their owner is rewritten to the queried name, so checks match
+    on ``_dmarc.<domain>`` / ``<selector>._domainkey.<domain>``. Records that
+    are not reachable from the queried name are dropped, so a stray foreign key
+    (e.g. another provider's domainkey host) never leaks into the results.
     """
     client = client or DNSClient()
     domain = result.domain
@@ -566,23 +620,34 @@ def with_compliance_probes(
             probe_result = client.query_domain(probe_domain, probe_types)
         except (DNSEngineError, ValueError):
             continue
-        # Keep only answers for the name we actually asked about. This filters
-        # out stray/aliased responses so foreign keys (e.g. a sendgrid CNAME
-        # target) never leak into the unique record set shown to the user.
+        # Only keep answers for the name we actually asked about, following
+        # CNAME chains so alias targets are attributed back to the query name.
         owner = _fqdn(probe_domain)
         filtered_responses = []
         for resp in probe_result.server_responses:
-            keep = [r for r in resp.records if _fqdn(r.name) == owner]
-            if resp.status == DNSServerStatus.OK and keep:
-                filtered_responses.append(
-                    ServerResponse(
-                        server=resp.server,
-                        status=resp.status,
-                        records=keep,
-                        response_time_ms=resp.response_time_ms,
-                        error=resp.error,
-                    )
+            if resp.status != DNSServerStatus.OK:
+                continue
+            aliases = _resolve_alias_names(resp.records, probe_domain)
+            records: list[DNSRecord] = []
+            for r in resp.records:
+                if r.type is RecordType.CNAME:
+                    continue
+                if r.type is RecordType.TXT and _fqdn(r.name) not in aliases:
+                    continue
+                if r.type is RecordType.TXT and _fqdn(r.name) != owner:
+                    r = replace(r, name=owner)
+                records.append(r)
+            if not records:
+                continue
+            filtered_responses.append(
+                ServerResponse(
+                    server=resp.server,
+                    status=resp.status,
+                    records=records,
+                    response_time_ms=resp.response_time_ms,
+                    error=resp.error,
                 )
+            )
         extra.extend(filtered_responses)
 
     return DomainResult(

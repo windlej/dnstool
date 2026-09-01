@@ -218,15 +218,26 @@ class TestMxBestPractices:
         assert check.severity.value == "warning"
         assert "IP literal" in check.details
 
-    def test_duplicate_priority_is_warning(self) -> None:
+    def test_equal_priority_distinct_hosts_is_pass(self) -> None:
         result = make_result(
             "example.com",
             _rec(RecordType.MX, "example.com.", "10 mail.example.com.", priority=10),
             _rec(RecordType.MX, "example.com.", "10 mail2.example.com.", priority=10),
         )
         check = run_checks(result, ["mx_best_practices"]).checks[0]
+        assert check.severity.value == "pass"
+
+    def test_redundant_mx_target_is_warning(self) -> None:
+        # Same (priority, host) written with different casing survives the
+        # record dedup and must be flagged as redundant.
+        result = make_result(
+            "example.com",
+            _rec(RecordType.MX, "example.com.", "10 mail.example.com.", priority=10),
+            _rec(RecordType.MX, "example.com.", "10 MAIL.EXAMPLE.COM.", priority=10),
+        )
+        check = run_checks(result, ["mx_best_practices"]).checks[0]
         assert check.severity.value == "warning"
-        assert "same priority" in check.details
+        assert "duplicate" in check.details
 
 
 class TestSoaBestPractices:
@@ -311,9 +322,9 @@ class TestNsBestPractices:
 
 
 class TestCaaBestPractices:
-    def test_missing_is_warning(self) -> None:
+    def test_missing_is_info(self) -> None:
         result = make_result("example.com")
-        assert run_checks(result, ["caa_best_practices"]).checks[0].severity.value == "warning"
+        assert run_checks(result, ["caa_best_practices"]).checks[0].severity.value == "info"
 
     def test_issue_tag_is_pass(self) -> None:
         result = make_result(
@@ -520,3 +531,94 @@ class TestProbes:
         }
         assert "google" in DEFAULT_DKIM_SELECTORS
         assert set(DEFAULT_DKIM_SELECTORS) == expected
+
+    def test_probe_cname_dmarc_attributed_to_query_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_query(self: object, domain: str, record_types=None) -> DomainResult:
+            if domain == "_dmarc.example.com":
+                return make_result(
+                    domain,
+                    _rec(
+                        RecordType.CNAME,
+                        "_dmarc.example.com.",
+                        "dmarc.alias.example.net.",
+                    ),
+                    _rec(TXT, "dmarc.alias.example.net.", '"v=DMARC1; p=reject"'),
+                )
+            return make_result(domain)
+
+        client = DNSClient(Config(use_system_resolver=False))
+        monkeypatch.setattr(DNSClient, "query_domain", fake_query)
+        base = make_result("example.com", _rec(TXT, "example.com.", '"v=spf1 -all"'))
+
+        augmented = with_compliance_probes(base, client)
+        dmarc_records = [
+            r
+            for r in augmented.unique_records.get(TXT, [])
+            if r.name == "_dmarc.example.com."
+        ]
+        assert len(dmarc_records) == 1
+        assert "easydmarc" not in dmarc_records[0].name
+        report = run_checks(augmented, ["dmarc"])
+        assert report.checks[0].severity.value == "pass"
+
+    def test_probe_cname_dkim_attributed_to_query_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_query(self: object, domain: str, record_types=None) -> DomainResult:
+            if domain == "selector1._domainkey.example.com":
+                return make_result(
+                    domain,
+                    _rec(
+                        RecordType.CNAME,
+                        "selector1._domainkey.example.com.",
+                        "selector1-example-com._domainkey.example.onmicrosoft.com.",
+                    ),
+                    _rec(
+                        TXT,
+                        "selector1-example-com._domainkey.example.onmicrosoft.com.",
+                        '"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4"',
+                    ),
+                )
+            if domain == "_dmarc.example.com":
+                return make_result(
+                    domain, _rec(TXT, "_dmarc.example.com.", '"v=DMARC1; p=reject"')
+                )
+            return make_result(domain)
+
+        client = DNSClient(Config(use_system_resolver=False))
+        monkeypatch.setattr(DNSClient, "query_domain", fake_query)
+        base = make_result("example.com")
+
+        augmented = with_compliance_probes(base, client)
+        report = run_checks(augmented, ["dkim"])
+        assert report.checks[0].severity.value == "pass"
+        assert "selector1" in report.checks[0].message
+
+    def test_probe_foreign_txt_without_cname_link_is_dropped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_query(self: object, domain: str, record_types=None) -> DomainResult:
+            if domain == "s1._domainkey.example.com":
+                # A bare foreign TXT with no CNAME tying it to the query name.
+                return make_result(
+                    domain,
+                    _rec(
+                        TXT,
+                        "s1.domainkey.u24.w1201.sendgrid.net.",
+                        '"v=DKIM1; p=abc"',
+                    ),
+                )
+            return make_result(domain)
+
+        client = DNSClient(Config(use_system_resolver=False))
+        monkeypatch.setattr(DNSClient, "query_domain", fake_query)
+        base = make_result("example.com")
+
+        augmented = with_compliance_probes(base, client)
+        txt_records = augmented.unique_records.get(TXT, [])
+        assert all(
+            r.name != "s1._domainkey.example.com."
+            for r in txt_records
+        )
