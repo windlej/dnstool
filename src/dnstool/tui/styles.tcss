@@ -16,6 +16,23 @@ DnstoolApp {
   margin-top: 1;
 }
 
+/* Visible focus so tab/shift+tab navigation is obvious */
+DataTable:focus {
+  border: round $accent;
+}
+
+DataTable {
+  border: round $primary;
+}
+
+Input:focus {
+  border: round $accent;
+}
+
+Button:focus {
+  text-style: bold;
+}
+
 /* --- Dashboard --- */
 
 #dashboard-table {
@@ -82,8 +99,19 @@ DnstoolApp {
   padding: 0 1;
 }
 
+.check-detail-bar {
+  width: 100%;
+  height: auto;
+  padding: 1;
+  margin: 1 0 0 0;
+  background: $panel;
+  color: $text-muted;
+  border: round $accent;
+}
+
 #checks-table {
-  height: 1fr;
+  height: auto;
+  max-height: 50%;
   margin-top: 1;
 }
 

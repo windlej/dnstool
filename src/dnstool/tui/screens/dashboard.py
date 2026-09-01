@@ -49,7 +49,7 @@ class Dashboard(Screen[None]):
 
     def on_mount(self) -> None:
         table = self.query_one("#dashboard-table", DataTable)
-        table.add_columns("Domain", "Status", "Last Snapshot", "Records", "Score")
+        table.add_columns("Domain", "Status", "Last Snapshot", "Records")
         table.cursor_type = "row"
         table.zebra_stripes = True
         self._load_domains()
@@ -142,7 +142,7 @@ class Dashboard(Screen[None]):
         empty_label = self.query_one("#dashboard-empty", Static)
         empty_label.display = not rows
         for domain, status, ts, count in rows:
-            table.add_row(domain, status, ts, str(count), "-")
+            table.add_row(domain, status, ts, str(count))
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         table = event.control

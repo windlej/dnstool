@@ -4,7 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from textual import work
-from textual.containers import Container, Vertical
+from textual.containers import Container
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from dnstool.config import Config
+    from dnstool.models import CheckResult
+
+
+def truncate(text: str, max_width: int) -> str:
+    """Truncate ``text`` to ``max_width`` characters, appending an ellipsis."""
+    if len(text) <= max_width:
+        return text
+    if max_width <= 1:
+        return "…"
+    return text[: max_width - 1].rstrip() + "…"
 
 
 class CheckScreen(Screen[None]):
@@ -26,20 +36,20 @@ class CheckScreen(Screen[None]):
         super().__init__()
         self.domain = domain
         self.config = config
+        self._checks: list[CheckResult] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(classes="screen-container"):
             with Container(classes="check-summary"):
                 yield Static("—", id="score-display", classes="check-score")
-                with Vertical(classes="check-details"):
-                    yield Static(
-                        f"Compliance checks for {self.domain}", id="check-title"
-                    )
+                yield Static(
+                    f"Compliance checks for {self.domain}", id="check-title"
+                )
             yield DataTable(id="checks-table")
-            with Container():
-                yield Static(f"Unique Records — {self.domain}", id="records-title")
-                yield DataTable(id="records-table")
+            yield Static("", id="check-detail-bar", classes="check-detail-bar")
+            yield Static(f"Unique Records — {self.domain}", id="records-title")
+            yield DataTable(id="records-table")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -67,11 +77,30 @@ class CheckScreen(Screen[None]):
             BackupScreen(domain=self.domain, config=self.config)
         )
 
+    def _update_check_details(self, index: int) -> None:
+        check = self._checks[index]
+        bar = self.query_one("#check-detail-bar", Static)
+        parts = [f"[bold]{check.message}[/bold]"]
+        if check.details:
+            parts.append(f"  {check.details}")
+        bar.update("\n".join(parts))
+
+    def on_data_table_row_highlighted(
+        self, event: DataTable.RowHighlighted
+    ) -> None:
+        if event.control.id != "checks-table":
+            return
+        if event.cursor_row is not None and 0 <= event.cursor_row < len(self._checks):
+            self._update_check_details(event.cursor_row)
+
     @work(exclusive=True, group="domain-check")
     async def _run_check(self) -> None:
         from dnstool.checks import run_compliance
         from dnstool.config import load_config
         from dnstool.dns_engine import DNSClient
+
+        detail_bar = self.query_one("#check-detail-bar", Static)
+        detail_bar.update("Checking…")
 
         cfg = self.config or load_config()
         client = DNSClient(cfg, timeout=cfg.timeout)
@@ -92,13 +121,17 @@ class CheckScreen(Screen[None]):
         else:
             display.add_class("score-bad")
 
+        self._checks = list(report.checks)
         checks_table = self.query_one("#checks-table", DataTable)
         checks_table.clear()
-        for check in report.checks:
+        for check in self._checks:
             sev = check.severity.value.upper()
-            msg = check.message or ""
-            details = check.details or ""
+            msg = truncate(check.message or "", 80)
+            details = truncate(check.details or "", 60)
             checks_table.add_row(sev, check.name, msg, details)
+
+        if self._checks:
+            self._update_check_details(0)
 
         result = await asyncio.to_thread(client.query_domain, self.domain)
         records_table = self.query_one("#records-table", DataTable)
@@ -106,5 +139,8 @@ class CheckScreen(Screen[None]):
         for _rtype, records in result.unique_records.items():
             for rec in records:
                 records_table.add_row(
-                    rec.type.value, rec.name, str(rec.ttl), rec.value
+                    rec.type.value,
+                    rec.name,
+                    str(rec.ttl),
+                    truncate(rec.value, 80),
                 )

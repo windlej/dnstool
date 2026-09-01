@@ -117,6 +117,10 @@ class DnstoolApp(App[None]):
     TITLE = "dnstool"
     CSS_PATH = "styles.tcss"
     COMMANDS = {DnstoolCommandProvider}
+    BINDINGS = [
+        ("tab", "focus_next", "Next"),
+        ("shift+tab", "focus_previous", "Previous"),
+    ]
 
     def __init__(self, config: Config | None = None) -> None:
         super().__init__()

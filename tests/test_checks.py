@@ -111,6 +111,15 @@ class TestDkim:
         )
         assert run_checks(result, ["dkim"]).checks[0].severity.value == "warning"
 
+    def test_foreign_domainkey_not_counted(self) -> None:
+        result = make_result(
+            "example.com",
+            _rec(TXT, "s1.domainkey.u24.w1201.sendgrid.net.", '"v=DKIM1; p=abc"'),
+        )
+        check = run_checks(result, ["dkim"]).checks[0]
+        assert check.severity.value == "warning"
+        assert "example.com" in check.message
+
 
 class TestSpf:
     def test_missing_is_critical(self) -> None:
@@ -348,6 +357,21 @@ class TestTxtBestPractices:
     def test_too_long_is_warning(self) -> None:
         long_value = '"' + "a" * 300 + '"'
         result = make_result("example.com", _rec(TXT, "example.com.", long_value))
+        check = run_checks(result, ["txt_best_practices"]).checks[0]
+        assert check.severity.value == "warning"
+        assert "255" in check.message
+
+    def test_split_into_strings_each_under_limit_is_pass(self) -> None:
+        record = _rec(TXT, "example.com.", '"' + "a" * 200 + '" "' + "b" * 200 + '"')
+        record.txt_strings = ["a" * 200, "b" * 200]
+        result = make_result("example.com", record)
+        check = run_checks(result, ["txt_best_practices"]).checks[0]
+        assert check.severity.value == "pass"
+
+    def test_one_string_over_limit_is_warning(self) -> None:
+        record = _rec(TXT, "example.com.", '"' + "a" * 100 + '" "' + "b" * 300 + '"')
+        record.txt_strings = ["a" * 100, "b" * 300]
+        result = make_result("example.com", record)
         check = run_checks(result, ["txt_best_practices"]).checks[0]
         assert check.severity.value == "warning"
         assert "255" in check.message

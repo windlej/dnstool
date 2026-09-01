@@ -103,6 +103,8 @@ def _rdata_to_record(rtype: RecordType, owner: str, ttl: int, rdata: Any) -> DNS
     elif rtype is RecordType.CAA:
         kwargs["flags"] = int(rdata.flags)
         kwargs["tag"] = rdata.tag.decode("utf-8")
+    elif rtype is RecordType.TXT:
+        kwargs["txt_strings"] = [s.decode("utf-8", errors="replace") for s in rdata.strings]
     return DNSRecord(type=rtype, name=owner, ttl=int(ttl), value=rdata.to_text(), **kwargs)
 
 

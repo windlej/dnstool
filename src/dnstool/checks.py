@@ -20,6 +20,7 @@ from dnstool.models import (
     CheckSeverity,
     ComplianceReport,
     DNSRecord,
+    DNSServerStatus,
     DomainResult,
     RecordType,
     ServerResponse,
@@ -186,7 +187,12 @@ def _is_dkim_key(value: str) -> bool:
 
 @register("dkim")
 def check_dkim(result: DomainResult) -> CheckResult:
-    """DKIM: presence of a ``<selector>._domainkey`` public key record."""
+    """DKIM: presence of a ``<selector>._domainkey.<domain>`` public key record.
+
+    Only keys published under the checked domain's own ``_domainkey`` zone are
+    counted; records on other hosts (e.g. a third-party mail provider's
+    domainkey host) are not treated as this domain's DKIM signing keys.
+    """
     suffix = f"._domainkey.{_fqdn(result.domain)}"
     matching = [r for r in _txt_records(result) if r.name.endswith(suffix)]
 
@@ -194,7 +200,7 @@ def check_dkim(result: DomainResult) -> CheckResult:
         return _result(
             "dkim",
             CheckSeverity.WARNING,
-            "No DKIM records found; signed email cannot be verified.",
+            f"No DKIM records found for {result.domain}; signed email cannot be verified.",
             record_type=RecordType.TXT,
         )
 
@@ -203,7 +209,8 @@ def check_dkim(result: DomainResult) -> CheckResult:
         return _result(
             "dkim",
             CheckSeverity.WARNING,
-            "Found DKIM-looking record(s) but none contain a valid public key.",
+            f"Found DKIM-looking record(s) for {result.domain} "
+            "but none contain a valid public key.",
             record_type=RecordType.TXT,
         )
 
@@ -478,7 +485,13 @@ def check_caa_best_practices(result: DomainResult) -> CheckResult:
 
 @register("txt_best_practices")
 def check_txt_best_practices(result: DomainResult) -> CheckResult:
-    """TXT: records within RFC 1035 string size limits."""
+    """TXT: records within RFC 1035 string size limits.
+
+    RFC 1035 caps each TXT character-string at 255 bytes. A host may split a
+    long value across multiple character-strings in a single TXT record, so the
+    limit is applied per-string (``DNSRecord.txt_strings``) rather than to the
+    joined value.
+    """
     txts = _txt_records(result)
 
     if not txts:
@@ -489,13 +502,20 @@ def check_txt_best_practices(result: DomainResult) -> CheckResult:
             record_type=RecordType.TXT,
         )
 
-    too_long = [r for r in txts if len(r.value) > 255]
-    if too_long:
-        names = ", ".join(sorted({r.name for r in too_long}))
+    violations: list[tuple[DNSRecord, list[tuple[int, int]]]] = []
+    for record in txts:
+        strings = record.txt_strings or [record.value]
+        oversized = [(i, len(s)) for i, s in enumerate(strings) if len(s) > 255]
+        if oversized:
+            violations.append((record, oversized))
+
+    if violations:
+        names = ", ".join(sorted({r.name for r, _ in violations}))
         return _result(
             "txt_best_practices",
             CheckSeverity.WARNING,
-            f"{len(too_long)} TXT record(s) exceed 255 characters.",
+            f"{len(violations)} TXT record(s) contain character-strings "
+            f"exceeding 255 bytes.",
             details=f"Records at: {names}",
             record_type=RecordType.TXT,
         )
@@ -503,7 +523,7 @@ def check_txt_best_practices(result: DomainResult) -> CheckResult:
     return _result(
         "txt_best_practices",
         CheckSeverity.PASS,
-        f"{len(txts)} TXT record(s) within RFC 1035 size limits.",
+        f"{len(txts)} TXT record(s) within RFC 1035 string size limits.",
         record_type=RecordType.TXT,
     )
 
@@ -546,7 +566,24 @@ def with_compliance_probes(
             probe_result = client.query_domain(probe_domain, probe_types)
         except (DNSEngineError, ValueError):
             continue
-        extra.extend(probe_result.server_responses)
+        # Keep only answers for the name we actually asked about. This filters
+        # out stray/aliased responses so foreign keys (e.g. a sendgrid CNAME
+        # target) never leak into the unique record set shown to the user.
+        owner = _fqdn(probe_domain)
+        filtered_responses = []
+        for resp in probe_result.server_responses:
+            keep = [r for r in resp.records if _fqdn(r.name) == owner]
+            if resp.status == DNSServerStatus.OK and keep:
+                filtered_responses.append(
+                    ServerResponse(
+                        server=resp.server,
+                        status=resp.status,
+                        records=keep,
+                        response_time_ms=resp.response_time_ms,
+                        error=resp.error,
+                    )
+                )
+        extra.extend(filtered_responses)
 
     return DomainResult(
         domain=domain,

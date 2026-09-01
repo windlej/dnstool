@@ -54,6 +54,8 @@ class DNSRecord:
     name: str
     ttl: int
     value: str
+    # TXT-specific: each individual character-string (RFC 1035 255-byte limit)
+    txt_strings: list[str] | None = None
     # MX-specific
     priority: int | None = None
     # SRV-specific
